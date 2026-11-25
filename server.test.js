@@ -21,10 +21,20 @@ test('two birds share a garden: join, feed, eat, fight, leave', async () => {
       throw new Error(`no "${t}" message arrived`)
     }
     say({ t: 'hi', bird })
-    return { ws, say, next, inbox, me: (await next('welcome')).you }
+    const welcome = await next('welcome')
+    say({ t: 'pos', x: 0, y: 3, z: 0, yaw: 0 }) // the first position is what puts you in the garden
+    return { ws, say, next, inbox, welcome, me: welcome.you }
   }
 
+  // a tab in the background connects and says hi but never reports a position: it must stay invisible
+  const ghost = new WebSocket(`ws://localhost:${port}/ws`)
+  await new Promise((open) => (ghost.onopen = open))
+  ghost.send(JSON.stringify({ t: 'hi', bird: 'wren' }))
+  ghost.send(JSON.stringify({ t: 'feed', kind: 'bread' })) // and it cannot act either
+
   const crow = await fly('crow')
+  assert.deepEqual(crow.welcome.players.map((p) => p.bird), ['crow', 'robin', 'bluetit'], 'only the three residents are in the garden: no ghost wren')
+  assert.equal(crow.welcome.items.length, 0, 'the ghost could not put out food')
   const robin = await fly('robin')
   assert.equal((await crow.next('join')).p.bird, 'crow')
   assert.equal((await crow.next('join')).p.bird, 'robin', 'the crow sees the robin arrive')

@@ -49,7 +49,8 @@ export async function start(port) {
     const s = JSON.stringify(m)
     for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s)
   }
-  const pub = ({ id, bird, score, bot, x, y, z, yaw, air, hp, out }) => ({ id, bird, score, bot, x, y, z, yaw, air, hp, out })
+  const visitors = () => players.size - RESIDENTS.length // humans who are actually in the garden
+  const pub = ({ id, bird, score, bot, x, y, z, yaw, air, hp, out }) => ({ id, bird, score, bot, x, y, z, yaw, air, hp, out }) // leaves out the socket and other private fields
 
   function drop(kind, n) {
     const fresh = []
@@ -139,13 +140,13 @@ export async function start(port) {
 
   wss.on('connection', (ws) => {
     if (wss.clients.size > MAX_PLAYERS) return ws.close(1013, 'The garden is full')
-    const p = { id: nextId++, bird: null, x: 0, y: 3, z: 0, yaw: 0, air: true, score: 0, budget: 0, fedAt: 0, cawAt: 0, ...healthy() }
+    const p = { id: nextId++, ws, bird: null, x: 0, y: 3, z: 0, yaw: 0, air: true, score: 0, budget: 0, fedAt: 0, cawAt: 0, seen: 0, ...healthy() }
     ws.alive = true
     ws.on('pong', () => (ws.alive = true))
     ws.on('error', () => {}) // an oversized or broken frame closes that socket, not the server
     ws.on('close', () => {
       if (players.delete(p.id)) all({ t: 'leave', id: p.id })
-      if (wss.clients.size) return
+      if (visitors()) return
       // the last visitor left: the next one finds a fresh garden, not residents with a week's head start
       items.clear()
       for (const b of players.values()) Object.assign(b, healthy(), { score: 0, grudge: 0 })
@@ -162,21 +163,28 @@ export async function start(port) {
       const now = Date.now()
 
       if (m.t === 'hi' && typeof m.bird === 'string' && Object.hasOwn(birds, m.bird)) {
+        const first = !p.bird
         p.bird = m.bird
-        if (!players.has(p.id)) {
-          players.set(p.id, p)
-          ws.send(JSON.stringify({ t: 'welcome', you: p.id, players: [...players.values()].map(pub), items: [...items.values()] }))
-        }
-        all({ t: 'join', p: pub(p) })
+        if (first) ws.send(JSON.stringify({ t: 'welcome', you: p.id, players: [...players.values()].map(pub), items: [...items.values()] }))
+        else if (players.has(p.id)) all({ t: 'join', p: pub(p) }) // changed species
       } else if (!p.bird) {
         return // nothing else counts until you have said which bird you are
       } else if (m.t === 'pos' && [m.x, m.y, m.z, m.yaw].every(Number.isFinite)) {
+        p.seen = now
         const k = Math.min(1, WORLD_R / Math.hypot(m.x, m.z))
         p.x = m.x * k
         p.y = Math.min(Math.max(m.y, 0), MAX_Y)
         p.z = m.z * k
         p.yaw = m.yaw
         p.air = !!m.air
+        // You enter the garden with your first position, not before: a tab in the background
+        // connects but never reports one, and used to hang in the air as a ghost.
+        if (!players.has(p.id)) {
+          players.set(p.id, p)
+          all({ t: 'join', p: pub(p) })
+        }
+      } else if (!players.has(p.id)) {
+        return
       } else if (m.t === 'eat') {
         const it = items.get(m.item)
         // 0.6 of slack: the server's idea of where you are is a few frames old
@@ -196,7 +204,7 @@ export async function start(port) {
   })
 
   const tick = setInterval(() => {
-    if (!wss.clients.size) return // nobody is watching, so nothing moves
+    if (!visitors()) return // nobody is in the garden, so nothing moves
     const now = Date.now()
     for (const p of players.values()) {
       if (p.out && now > p.back) {
@@ -210,10 +218,14 @@ export async function start(port) {
 
   const chores = setInterval(() => {
     seconds++
-    for (const p of players.values()) p.budget = 0
+    const now = Date.now()
+    for (const p of players.values()) {
+      p.budget = 0
+      if (p.ws && now - p.seen > 15000) p.ws.terminate() // went silent: out of the garden
+    }
     // a kind neighbour keeps a little food on the table
     const kinds = Object.keys(foods).filter((k) => k !== 'bread')
-    if (seconds % 4 === 0 && wss.clients.size && items.size < 12) drop(kinds[Math.floor(Math.random() * kinds.length)], 3)
+    if (seconds % 4 === 0 && visitors() && items.size < 12) drop(kinds[Math.floor(Math.random() * kinds.length)], 3)
     if (seconds % 30 === 0)
       for (const ws of wss.clients) {
         if (!ws.alive) {

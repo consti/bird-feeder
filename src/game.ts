@@ -112,17 +112,22 @@ const send = (m: object) => ws?.readyState === WebSocket.OPEN && ws.send(JSON.st
 const byId = (id: number) => (id === world.me.id ? world.me : world.others.get(id))
 
 function connect() {
-  ws = new WebSocket(url)
-  ws.onopen = () => send({ t: 'hi', bird: world.me.bird })
-  ws.onclose = () => {
+  // one live socket at most, and none while the tab is in the background: a hidden tab
+  // can't fly, so it leaves the garden instead of hanging in the air
+  if (document.hidden || (ws && ws.readyState <= WebSocket.OPEN)) return
+  const sock = (ws = new WebSocket(url))
+  sock.onopen = () => send({ t: 'hi', bird: world.me.bird })
+  sock.onclose = () => {
+    if (ws !== sock) return // a newer connection has taken over
     world.online = false
-    Object.assign(world.me, fresh, { id: 0 })
+    Object.assign(world.me, fresh, { id: 0, score: 0 })
     world.others.clear()
     world.items.clear()
     changed()
     setTimeout(connect, 3000) // you can keep flying alone meanwhile
   }
-  ws.onmessage = (e) => {
+  sock.onmessage = (e) => {
+    if (ws !== sock) return
     const m = JSON.parse(e.data)
     const now = performance.now()
     if (m.t === 'pos') {
@@ -201,6 +206,7 @@ function connect() {
   }
 }
 connect()
+document.addEventListener('visibilitychange', () => (document.hidden ? ws?.close() : connect()))
 
 // ---------- what you can do ----------
 
