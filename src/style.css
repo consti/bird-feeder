@@ -1,0 +1,177 @@
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(oklch(97% .03 95), oklch(21% .03 260));
+  --sky: light-dark(oklch(88% .07 230), oklch(30% .07 265));
+  --card: light-dark(oklch(100% 0 0), oklch(27% .03 260));
+  --ink: light-dark(oklch(27% .04 260), oklch(94% .02 95));
+  --muted: light-dark(oklch(44% .03 260), oklch(78% .02 95));
+  --accent: light-dark(oklch(46% .14 145), oklch(78% .15 145));
+  --on-accent: light-dark(oklch(100% 0 0), oklch(20% .03 260));
+  --warn: light-dark(oklch(48% .19 30), oklch(78% .13 30));
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 1.0625rem/1.55 ui-rounded, system-ui, sans-serif;
+}
+
+h1, h2, h3 { line-height: 1.15; text-wrap: balance; }
+h2 { margin: 0 0 .25rem; font-size: 1.6rem; }
+p { text-wrap: pretty; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.hero {
+  padding: 3rem 1rem 2.5rem;
+  text-align: center;
+  background: linear-gradient(in oklch, var(--sky), var(--bg));
+
+  h1 { margin: 0; font-size: clamp(2.5rem, 9vw, 4.5rem); }
+  p { margin: .5rem auto 0; max-width: 32rem; color: var(--muted); }
+}
+
+main {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 60rem;
+  margin: auto;
+  padding: 0 1rem 2rem;
+}
+
+section {
+  padding: 1.5rem;
+  border-radius: 1.5rem;
+  background: var(--card);
+  box-shadow: 0 .25rem 1.5rem oklch(0% 0 0 / .08);
+
+  > p:first-of-type { margin-top: 0; color: var(--muted); }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem .9rem;
+    border: 2px solid var(--accent);
+    border-radius: 99rem;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    transition: scale .15s;
+
+    &:hover { scale: 1.06; }
+    &[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+  }
+}
+
+/* ---------- the 3D garden ---------- */
+
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  margin-top: 1rem;
+  border-radius: 1.25rem;
+  overflow: hidden;
+
+  .canvas { position: absolute; inset: 0; }
+
+  .chips {
+    position: absolute;
+    inset: auto auto .75rem .75rem;
+    button { padding: .3rem .7rem; font-size: .9rem; }
+  }
+  /* the sky is light in every season and both themes, so this text stays dark */
+  .hint {
+    position: absolute;
+    inset: .75rem 1rem auto auto;
+    color: oklch(30% .04 260);
+    font-size: .8rem;
+    pointer-events: none;
+  }
+  .no3d { margin: 0; padding: 4rem 2rem; color: oklch(30% .04 260); text-align: center; }
+}
+@media (width < 40rem) {
+  .stage {
+    aspect-ratio: 1;
+    /* emoji-only season buttons on phones; the names stay in the DOM for screen readers */
+    .chips button { gap: 0; font-size: 0; span { font-size: 1.1rem; } }
+  }
+}
+
+.info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0 1.5rem;
+
+  p { margin: 1rem 0 0; }
+  strong { display: block; }
+}
+#feeder:has([data-id="bread"][aria-pressed="true"]) .note { color: var(--warn); }
+.tip { padding-inline-start: 1rem; border-inline-start: .3rem solid var(--accent); }
+
+.guests {
+  margin-top: 1.5rem;
+
+  .chips button { padding: .3rem .7rem; font-size: .9rem; }
+  .dot { width: .9rem; height: .9rem; border: 3px solid; border-radius: 50%; }
+  .fact { min-height: 3.2em; margin: .75rem 0 0; }
+}
+
+.crow-tip {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: light-dark(oklch(94% .01 280), oklch(33% .03 280));
+
+  h3 { margin: 0 0 .25rem; }
+  p { margin: 0; }
+}
+
+/* ---------- rules ---------- */
+
+#rules { container-type: inline-size; }
+.rules {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+
+  li { padding: 1rem; border-radius: 1rem; background: var(--bg); }
+  strong { display: block; }
+}
+@container (width > 34rem) {
+  .rules { grid-template-columns: 1fr 1fr; }
+}
+@container (width > 52rem) {
+  .rules { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+footer { padding: 0 1rem 3rem; text-align: center; color: var(--muted); font-size: .9rem; }
+
+/* ---------- motion ---------- */
+
+@keyframes reveal { from { opacity: 0; translate: 0 3rem; scale: .92; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .rules li {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 90%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
