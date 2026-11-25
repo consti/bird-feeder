@@ -53,3 +53,14 @@ export const seasons = {
 }
 
 export type SeasonId = keyof typeof seasons
+
+// ---- game rules, shared by the browser and the server ----
+
+export const TABLE_Y = 1.505
+export const WORLD_R = 4.3 // birds stay over the island
+export const MAX_Y = 4.2
+
+// every bird can eat bread, which is the problem with bread
+export const canEat = (bird: BirdId, food: FoodId) => food === 'bread' || (foods[food].birds as BirdId[]).includes(bird)
+// bigger birds reach further
+export const reach = (bird: BirdId) => 0.3 + 0.12 * birds[bird].size

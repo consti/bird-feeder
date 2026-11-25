@@ -75,37 +75,126 @@ section {
 
 /* ---------- the 3D garden ---------- */
 
+.picker {
+  .chips button { padding: .3rem .7rem; font-size: .9rem; }
+  .fact { min-height: 3.2em; margin: .75rem 0 0; }
+}
+.dot { flex: none; width: .9rem; height: .9rem; border: 3px solid; border-radius: 50%; }
+
 .stage {
   position: relative;
   aspect-ratio: 16 / 10;
   margin-top: 1rem;
   border-radius: 1.25rem;
   overflow: hidden;
+  /* the sky is light in every season and both themes, so overlay text stays dark */
+  color: oklch(27% .04 260);
 
   .canvas { position: absolute; inset: 0; }
 
   .chips {
     position: absolute;
-    inset: auto auto .75rem .75rem;
+    inset: .75rem auto auto .75rem;
     button { padding: .3rem .7rem; font-size: .9rem; }
   }
-  /* the sky is light in every season and both themes, so this text stays dark */
-  .hint {
+
+  .hud {
     position: absolute;
-    inset: .75rem 1rem auto auto;
-    color: oklch(30% .04 260);
+    inset: .75rem .75rem auto auto;
+    min-width: 10rem;
+    padding: .5rem .75rem;
+    border-radius: .75rem;
+    background: oklch(100% 0 0 / .7);
+    backdrop-filter: blur(6px);
     font-size: .8rem;
     pointer-events: none;
+
+    ol { margin: .25rem 0 0; padding: 0; list-style: none; }
+    li { display: flex; align-items: center; gap: .4rem; }
+    b { margin-inline-start: auto; padding-inline-start: .75rem; }
+    .you { font-weight: 700; }
+    .bot { color: oklch(45% .03 260); }
+    .dot { width: .7rem; height: .7rem; border-width: 2px; }
   }
-  .no3d { margin: 0; padding: 4rem 2rem; color: oklch(30% .04 260); text-align: center; }
+
+  .cta {
+    position: absolute;
+    inset: auto 0 1rem;
+    width: fit-content;
+    margin: auto;
+    padding: .4rem 1rem;
+    border-radius: 99rem;
+    background: oklch(27% .04 260 / .85);
+    color: white;
+    font-size: .9rem;
+    pointer-events: none;
+  }
+  &:focus .idle, &:not(:focus) .keys { display: none; }
+
+  /* touch controls, shown on touch screens only */
+  .touch { display: none; }
+  .stick {
+    position: absolute;
+    inset: auto auto .75rem .75rem;
+    width: 6.5rem;
+    aspect-ratio: 1;
+    border: 2px solid oklch(27% .04 260 / .5);
+    border-radius: 50%;
+    background: oklch(100% 0 0 / .45);
+    touch-action: none;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 2.5rem;
+      height: 2.5rem;
+      margin: auto;
+      border-radius: 50%;
+      background: oklch(27% .04 260 / .7);
+      translate: calc(var(--x, 0) * 2rem) calc(var(--y, 0) * 2rem);
+    }
+  }
+  .pads {
+    position: absolute;
+    inset: auto .75rem .75rem auto;
+    display: flex;
+    align-items: end;
+    gap: .5rem;
+
+    button {
+      width: 4.5rem;
+      aspect-ratio: 1;
+      border: 2px solid oklch(27% .04 260 / .5);
+      border-radius: 50%;
+      background: oklch(100% 0 0 / .6);
+      color: inherit;
+      font: inherit;
+      font-weight: 700;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .small { width: 3.25rem; font-size: .8rem; }
+  }
+
+  .no3d { margin: 0; padding: 4rem 2rem; text-align: center; }
+}
+@media (pointer: coarse) {
+  .stage .cta { display: none; }
+  .stage .touch { display: contents; }
 }
 @media (width < 40rem) {
   .stage {
-    aspect-ratio: 1;
+    aspect-ratio: 4 / 5; /* taller on phones: room for the touch controls */
     /* emoji-only season buttons on phones; the names stay in the DOM for screen readers */
+    .chips { max-width: 40%; }
     .chips button { gap: 0; font-size: 0; span { font-size: 1.1rem; } }
+    .hud { min-width: 0; font-size: .7rem; li:nth-child(n + 4):not(.you) { display: none; } }
   }
 }
+
+#feeder h3 { margin: 1.5rem 0 .5rem; }
 
 .info {
   display: grid;
@@ -115,19 +204,11 @@ section {
   p { margin: 1rem 0 0; }
   strong { display: block; }
 }
-#feeder:has([data-id="bread"][aria-pressed="true"]) .note { color: var(--warn); }
+.note.warn { color: var(--warn); }
 .tip { padding-inline-start: 1rem; border-inline-start: .3rem solid var(--accent); }
 
-.guests {
-  margin-top: 1.5rem;
-
-  .chips button { padding: .3rem .7rem; font-size: .9rem; }
-  .dot { width: .9rem; height: .9rem; border: 3px solid; border-radius: 50%; }
-  .fact { min-height: 3.2em; margin: .75rem 0 0; }
-}
-
 .crow-tip {
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   padding: 1rem 1.25rem;
   border-radius: 1rem;
   background: light-dark(oklch(94% .01 280), oklch(33% .03 280));
