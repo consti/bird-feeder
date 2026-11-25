@@ -111,7 +111,8 @@ section {
 
     ol { margin: .25rem 0 0; padding: 0; list-style: none; }
     li { display: flex; align-items: center; gap: .4rem; }
-    b { margin-inline-start: auto; padding-inline-start: .75rem; }
+    i { margin-inline-start: auto; padding-inline-start: .5rem; color: oklch(55% .22 20); font-style: normal; letter-spacing: -.1em; }
+    b { min-width: 1.5rem; text-align: end; }
     .you { font-weight: 700; }
     .bot { color: oklch(45% .03 260); }
     .dot { width: .7rem; height: .7rem; border-width: 2px; }
@@ -119,7 +120,7 @@ section {
 
   .cta {
     position: absolute;
-    inset: auto 0 1rem;
+    inset: auto 0 4.5rem;
     width: fit-content;
     margin: auto;
     padding: .4rem 1rem;
@@ -130,6 +131,53 @@ section {
     pointer-events: none;
   }
   &:focus .idle, &:not(:focus) .keys { display: none; }
+
+  /* under the season buttons, stopping short of the scoreboard */
+  .toast {
+    position: absolute;
+    inset: 3.75rem 12.5rem auto .75rem;
+    width: fit-content;
+    margin: 0;
+    padding: .4rem 1rem;
+    border-radius: .75rem;
+    background: oklch(98% .08 95 / .92);
+    font-weight: 700;
+    pointer-events: none;
+    animation: toast 4s forwards;
+  }
+
+  .arsenal {
+    position: absolute;
+    inset: auto 0 .75rem;
+    display: flex;
+    gap: .5rem;
+    width: fit-content;
+    margin: auto;
+
+    button {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 3rem;
+      aspect-ratio: 1;
+      padding: 0;
+      border: 2px solid oklch(27% .04 260 / .6);
+      border-radius: .75rem;
+      background: oklch(100% 0 0 / .8);
+      color: inherit;
+      font: inherit;
+      font-size: 1.3rem;
+      line-height: 1;
+      overflow: hidden;
+      cursor: pointer;
+      touch-action: manipulation;
+
+      &:disabled { background: oklch(100% 0 0 / .4); cursor: default; filter: grayscale(1); }
+      small { font-size: .6rem; font-weight: 700; }
+      /* the cooldown: a shade that drains away */
+      i { position: absolute; inset: 0; background: oklch(27% .04 260 / .55); transform-origin: bottom; animation: drain linear forwards; }
+    }
+  }
 
   /* touch controls, shown on touch screens only */
   .touch { display: none; }
@@ -183,6 +231,8 @@ section {
 @media (pointer: coarse) {
   .stage .cta { display: none; }
   .stage .touch { display: contents; }
+  /* a column down the right edge, between the scoreboard and the flap button, so the middle stays clear */
+  .stage .arsenal { inset: 7.25rem .75rem auto auto; flex-direction: column; gap: .4rem; margin: 0; button { width: 2.5rem; font-size: 1.1rem; } }
 }
 @media (width < 40rem) {
   .stage {
@@ -191,10 +241,12 @@ section {
     .chips { max-width: 40%; }
     .chips button { gap: 0; font-size: 0; span { font-size: 1.1rem; } }
     .hud { min-width: 0; font-size: .7rem; li:nth-child(n + 4):not(.you) { display: none; } }
+    .toast { inset: 6.75rem .75rem auto; font-size: .85rem; }
   }
 }
 
 #feeder h3 { margin: 1.5rem 0 .5rem; }
+.legend { margin: 1rem 0 0; color: var(--muted); font-size: .9rem; }
 
 .info {
   display: grid;
@@ -242,6 +294,8 @@ footer { padding: 0 1rem 3rem; text-align: center; color: var(--muted); font-siz
 /* ---------- motion ---------- */
 
 @keyframes reveal { from { opacity: 0; translate: 0 3rem; scale: .92; } }
+@keyframes toast { 0% { opacity: 0; scale: .8; } 6%, 80% { opacity: 1; scale: 1; } 100% { opacity: 0; } }
+@keyframes drain { from { scale: 1 1; } to { scale: 1 0; } }
 
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
@@ -255,4 +309,5 @@ footer { padding: 0 1rem 3rem; text-align: center; color: var(--muted); font-siz
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  .stage .arsenal i { display: none; } /* without its animation the cooldown shade would never leave */
 }

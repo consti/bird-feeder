@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'rea
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { birds, foods, MAX_Y, seasons, TABLE_Y, WORLD_R, type Bird, type Food, type SeasonId } from './data'
-import { input, sync, useWorld, world, type Player } from './game'
+import { input, sync, useWorld, world, type Fx, type Player } from './game'
 
 type V3 = [number, number, number]
 
@@ -77,6 +77,7 @@ function Flight() {
   useFrame(({ camera }, rawDt) => {
     const dt = Math.min(rawDt, 0.05) // a background tab must not teleport you
     const me = world.me
+    if (me.out) return // knocked out: nothing to steer until you are back
     const v = vel.current
     const now = performance.now()
     const slow = now < me.stuffed ? 0.4 : 1
@@ -123,15 +124,17 @@ function BirdModel({ p, mine }: { p: Player; mine?: boolean }) {
   const inner = useRef<THREE.Group>(null!)
   const wingL = useRef<THREE.Group>(null!)
   const wingR = useRef<THREE.Group>(null!)
+  const badge = useRef<THREE.Group>(null!)
   const beak = b.beak ?? '#3a3128'
   const size = b.size * 0.75
 
   useLayoutEffect(() => void outer.current.position.set(p.x, p.y, p.z), [p])
 
-  useFrame((_, dt) => {
+  useFrame(({ camera }, dt) => {
     const o = outer.current
     const now = performance.now()
     const t = now / 1000 + p.id
+    o.visible = !p.out
     // your own bird is exact; the others glide between the server's 15 updates a second
     goal.set(p.x, p.y, p.z)
     if (mine) o.position.copy(goal)
@@ -145,8 +148,10 @@ function BirdModel({ p, mine }: { p: Player; mine?: boolean }) {
     // lean into the flight, peck after eating, hop when calling
     i.rotation.x = p.air ? 0.3 : now < p.peck ? Math.abs(Math.sin(t * 16)) * 0.9 : 0
     i.position.y = now < p.hop && !calm ? Math.abs(Math.sin(t * 14)) * 0.2 : 0
+    i.rotation.z = now < p.hurt && !calm ? Math.sin(t * 60) * 0.35 : 0 // ouch
     const fat = now < p.stuffed ? 1.45 : 1 // full of bread
     i.scale.set(size * fat, size, size * fat)
+    badge.current.quaternion.copy(o.quaternion).invert().multiply(camera.quaternion) // hearts always face the viewer
   })
 
   return (
@@ -173,14 +178,60 @@ function BirdModel({ p, mine }: { p: Player; mine?: boolean }) {
         </group>
         <Blob p={[0.06, 0.07, 0]} s={[0.012, 0.08, 0.012]} c="#3a3128" />
         <Blob p={[-0.06, 0.07, 0]} s={[0.012, 0.08, 0.012]} c="#3a3128" />
+      </group>
+      {/* floating above the bird, where pecking and wobbling don't reach: its hearts, and the pink arrow that says "this one is you" */}
+      <group ref={badge} position-y={0.72 * size + 0.1}>
+        {Array.from({ length: p.hp }, (_, n) => (
+          <mesh key={n} geometry={ball} position-x={(n - (p.hp - 1) / 2) * 0.1} scale={0.04}>
+            <meshBasicMaterial color="#ff2b44" toneMapped={false} />
+          </mesh>
+        ))}
         {mine && (
-          // the pink arrow that says "this one is you"
-          <mesh position={[0, 0.92, 0.05]} rotation-x={Math.PI}>
-            <coneGeometry args={[0.08, 0.16, 4]} />
+          <mesh position-y={0.17} rotation-x={Math.PI}>
+            <coneGeometry args={[0.07, 0.14, 4]} />
             <meshBasicMaterial color="#ff2d78" toneMapped={false} />
           </mesh>
         )}
       </group>
+    </group>
+  )
+}
+
+// A shot on its way, or the feathers of a knocked-out bird. Lives for fx.ms, then hides.
+function Effect({ fx }: { fx: Fx }) {
+  const ref = useRef<THREE.Group>(null!)
+  useFrame(() => {
+    const g = ref.current
+    const k = (performance.now() - fx.t0) / fx.ms
+    g.visible = k < 1
+    if (!g.visible) return
+    goal.set(...fx.from)
+    fwd.set(...fx.to)
+    if (fx.kind === 'laser') {
+      // a beam: stretched from the eyes to the target for a moment
+      g.position.lerpVectors(goal, fwd, 0.5)
+      g.scale.set(1, goal.distanceTo(fwd), 1)
+      g.quaternion.setFromUnitVectors(UP, fwd.sub(goal).normalize())
+    } else if (fx.kind === 'poof') {
+      g.position.copy(goal)
+      g.scale.setScalar(0.4 + k * 1.6)
+    } else {
+      g.position.lerpVectors(goal, fwd, k)
+    }
+  })
+  return (
+    <group ref={ref} visible={false}>
+      {fx.kind === 'laser' &&
+        [-0.05, 0.05].map((x) => (
+          <mesh key={x} position-x={x}>
+            <cylinderGeometry args={[0.02, 0.02, 1, 6]} />
+            <meshBasicMaterial color="#ff1a1a" toneMapped={false} />
+          </mesh>
+        ))}
+      {fx.kind === 'poof' && Array.from({ length: 9 }, (_, n) => <Blob key={n} p={[Math.cos(n * 2.4) * 0.3, Math.sin(n * 4.1) * 0.25, Math.sin(n * 2.4) * 0.3]} s={[0.07, 0.02, 0.04]} c={n % 2 ? fx.color : '#f6f3ea'} />)}
+      {fx.kind === 'seed' && <Blob p={[0, 0, 0]} s={0.05} c="#2d2a26" />}
+      {fx.kind === 'bread' && <Blob p={[0, 0, 0]} s={[0.07, 0.07, 0.2]} c="#dcbc85" />}
+      {fx.kind === 'poop' && <Blob p={[0, 0, 0]} s={[0.1, 0.13, 0.1]} c="#f4f1e8" />}
     </group>
   )
 }
@@ -268,6 +319,10 @@ export default function Scene({ season }: { season: SeasonId }) {
           </mesh>
         )
       })}
+
+      {world.fx.map((fx) => (
+        <Effect key={fx.id} fx={fx} />
+      ))}
 
       <BirdModel p={world.me} mine />
       {[...world.others.values()].map((p) => (

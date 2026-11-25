@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { start } from './server.js'
 
-test('two birds share a garden: join, feed, eat, leave', async () => {
+test('two birds share a garden: join, feed, eat, fight, leave', async () => {
   const { port, stop } = await start(0)
 
   async function fly(bird) {
@@ -49,7 +49,7 @@ test('two birds share a garden: join, feed, eat, leave', async () => {
   // then the crow lands next to it
   crow.say({ t: 'pos', x: nut.x, y: 1.505, z: nut.z, yaw: 0 })
   crow.say({ t: 'eat', item: nut.id })
-  assert.deepEqual(await robin.next('ate'), { t: 'ate', item: nut.id, by: crow.me, kind: 'peanuts', score: 1 }, 'only the crow next to the peanut gets it')
+  assert.deepEqual(await robin.next('ate'), { t: 'ate', item: nut.id, by: crow.me, kind: 'peanuts', score: 1, hp: 3 }, 'only the crow next to the peanut gets it')
 
   // anyone can eat bread, and it scores nothing
   robin.say({ t: 'feed', kind: 'bread' })
@@ -66,6 +66,27 @@ test('two birds share a garden: join, feed, eat, leave', async () => {
   robin.inbox.length = 0 // drop older position updates
   const seen = (await robin.next('pos')).p.find(([id]) => id === crow.me)
   assert.deepEqual(seen.slice(1, 4), [4.3, 0, 0])
+
+  // ---- fighting ----
+  // laser eyes are locked at 1 point, so this must do nothing
+  crow.say({ t: 'fire', w: 'laser' })
+  // two more peanuts unlock the seed spit at 3 points
+  for (const it of items.slice(1, 3)) {
+    crow.say({ t: 'pos', x: it.x, y: 1.505, z: it.z, yaw: 0 })
+    crow.say({ t: 'eat', item: it.id })
+    await robin.next('ate')
+  }
+  robin.say({ t: 'pos', x: items[2].x, y: 1.505, z: items[2].z, yaw: 0 }) // right next to the crow
+  crow.say({ t: 'fire', w: 'seed' })
+  crow.say({ t: 'fire', w: 'seed' }) // still cooling down: ignored
+  assert.deepEqual(await robin.next('shot'), { t: 'shot', w: 'seed', by: crow.me, hits: [[robin.me, 2]] }, 'the first shot to land is the unlocked seed, not the locked laser')
+  await sleep(650)
+  crow.say({ t: 'fire', w: 'seed' })
+  assert.deepEqual((await robin.next('shot')).hits, [[robin.me, 1]], 'the shot fired during the cooldown never happened')
+  await sleep(650)
+  crow.say({ t: 'fire', w: 'seed' })
+  assert.deepEqual((await robin.next('shot')).hits, [[robin.me, 0]])
+  assert.deepEqual(await robin.next('ko'), { t: 'ko', id: robin.me, by: crow.me, w: 'seed', score: 6 }, 'three hearts gone: knocked out, and the crow gets the bonus')
 
   robin.ws.close()
   assert.equal((await crow.next('leave')).id, robin.me)

@@ -6,11 +6,12 @@ import { extname, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { birds, canEat, foods, MAX_Y, reach, TABLE_Y, WORLD_R } from './src/data.ts'
+import { birds, canEat, foods, KO_BONUS, MAX_HP, MAX_Y, reach, TABLE_Y, weapons, WORLD_R } from './src/data.ts'
 
 const MAX_PLAYERS = 40
 const MAX_ITEMS = 60
-const RESIDENTS = [['crow', -1.62, 2.5, -0.67], ['robin', 2.3, 0.84, 0.3], ['bluetit', 2.9, 0.95, -1.8]] // bird, then its perch
+const RESIDENTS = [['crow', 'laser', -1.62, 2.5, -0.67], ['robin', 'seed', 2.3, 0.84, 0.3], ['bluetit', 'bread', 2.9, 0.95, -1.8]] // bird, the weapon it shoots back with, its perch
+const healthy = () => ({ hp: MAX_HP, out: false, back: 0, safe: 0, fired: {} })
 const r2 = (n) => Math.round(n * 100) / 100
 
 const dist = resolve(import.meta.dirname, 'dist')
@@ -48,7 +49,7 @@ export async function start(port) {
     const s = JSON.stringify(m)
     for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s)
   }
-  const pub = ({ id, bird, score, bot, x, y, z, yaw, air }) => ({ id, bird, score, bot, x, y, z, yaw, air })
+  const pub = ({ id, bird, score, bot, x, y, z, yaw, air, hp, out }) => ({ id, bird, score, bot, x, y, z, yaw, air, hp, out })
 
   function drop(kind, n) {
     const fresh = []
@@ -64,17 +65,53 @@ export async function start(port) {
 
   function eat(p, it) {
     items.delete(it.id)
-    if (it.kind !== 'bread') p.score++ // bread fills you up and feeds you nothing
-    all({ t: 'ate', item: it.id, by: p.id, kind: it.kind, score: p.score })
+    if (it.kind !== 'bread') {
+      // bread fills you up and feeds you nothing; real food scores and heals
+      p.score++
+      p.hp = Math.min(MAX_HP, p.hp + 1)
+    }
+    all({ t: 'ate', item: it.id, by: p.id, kind: it.kind, score: p.score, hp: p.hp })
   }
 
-  for (const [bird, ...home] of RESIDENTS) {
+  // Every weapon hits at once; the browsers draw the seed, the baguette or the beam on its way.
+  function shoot(p, name, now) {
+    const w = weapons[name]
+    p.fired[name] = now
+    const hit = [...players.values()]
+      .filter((q) => q !== p && !q.out && now > q.safe && !(p.bot && q.bot)) // residents don't shoot each other
+      .map((q) => ({ q, flat: Math.hypot(q.x - p.x, q.z - p.z), d: Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) }))
+      // a poop bomb lands on everyone below you; everything else flies to the nearest bird in range
+      .filter(({ q, flat, d }) => (name === 'poop' ? p.y - q.y > 0.4 && flat < w.range : d < w.range))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, name === 'poop' ? Infinity : 1)
+      .map(({ q }) => q)
+    for (const q of hit) {
+      q.hp = Math.max(0, q.hp - w.damage)
+      if (q.bot) q.grudge ||= now + 700 // residents shoot back
+    }
+    all({ t: 'shot', w: name, by: p.id, hits: hit.map((q) => [q.id, q.hp]) })
+    for (const q of hit) {
+      if (q.hp) continue
+      // knocked out: gone in a puff of feathers, back in three seconds
+      q.out = true
+      q.back = now + 3000
+      if (q.bot) [q.x, q.y, q.z, q.target] = [...q.home, 0]
+      p.score += KO_BONUS
+      all({ t: 'ko', id: q.id, by: p.id, w: name, score: p.score })
+    }
+  }
+
+  for (const [bird, weapon, ...home] of RESIDENTS) {
     const id = nextId++
-    players.set(id, { id, bird, bot: true, home, x: home[0], y: home[1], z: home[2], yaw: 0.4, air: false, score: 0, rest: 0, target: 0 })
+    players.set(id, { id, bird, bot: true, weapon, home, x: home[0], y: home[1], z: home[2], yaw: 0.4, air: false, score: 0, rest: 0, target: 0, grudge: 0, ...healthy() })
   }
 
   // residents wait on their perch, fly to food they like, eat it and fly home
   function moveResident(b, dt, now) {
+    if (b.grudge && now > b.grudge) {
+      b.grudge = 0
+      shoot(b, b.weapon, now)
+    }
     if (!b.target && now > b.rest) {
       // food has to lie there for 3 s first, so visitors get a head start
       const tasty = [...items.values()].filter((it) => it.kind !== 'bread' && canEat(b.bird, it.kind) && now - it.born > 3000)
@@ -102,7 +139,7 @@ export async function start(port) {
 
   wss.on('connection', (ws) => {
     if (wss.clients.size > MAX_PLAYERS) return ws.close(1013, 'The garden is full')
-    const p = { id: nextId++, bird: null, x: 0, y: 3, z: 0, yaw: 0, air: true, score: 0, budget: 0, fedAt: 0, cawAt: 0 }
+    const p = { id: nextId++, bird: null, x: 0, y: 3, z: 0, yaw: 0, air: true, score: 0, budget: 0, fedAt: 0, cawAt: 0, ...healthy() }
     ws.alive = true
     ws.on('pong', () => (ws.alive = true))
     ws.on('error', () => {}) // an oversized or broken frame closes that socket, not the server
@@ -111,7 +148,7 @@ export async function start(port) {
       if (wss.clients.size) return
       // the last visitor left: the next one finds a fresh garden, not residents with a week's head start
       items.clear()
-      for (const b of players.values()) b.score = 0
+      for (const b of players.values()) Object.assign(b, healthy(), { score: 0, grudge: 0 })
     })
     ws.on('message', (raw) => {
       if (++p.budget > 40) return // messages per second, refilled below
@@ -143,10 +180,14 @@ export async function start(port) {
       } else if (m.t === 'eat') {
         const it = items.get(m.item)
         // 0.6 of slack: the server's idea of where you are is a few frames old
-        if (it && canEat(p.bird, it.kind) && Math.hypot(p.x - it.x, p.y - TABLE_Y, p.z - it.z) < reach(p.bird) + 0.6) eat(p, it)
+        if (it && !p.out && canEat(p.bird, it.kind) && Math.hypot(p.x - it.x, p.y - TABLE_Y, p.z - it.z) < reach(p.bird) + 0.6) eat(p, it)
       } else if (m.t === 'feed' && typeof m.kind === 'string' && Object.hasOwn(foods, m.kind) && now - p.fedAt > 1500) {
         p.fedAt = now
         drop(m.kind, 6)
+      } else if (m.t === 'fire' && typeof m.w === 'string' && Object.hasOwn(weapons, m.w)) {
+        const w = weapons[m.w]
+        // 50 ms of grace, because the browser enforces the same cooldown on its own clock
+        if (!p.out && p.score >= w.unlock && now - (p.fired[m.w] ?? 0) > w.cooldown - 50) shoot(p, m.w, now)
       } else if (m.t === 'caw' && now - p.cawAt > 800) {
         p.cawAt = now
         all({ t: 'caw', id: p.id })
@@ -157,7 +198,13 @@ export async function start(port) {
   const tick = setInterval(() => {
     if (!wss.clients.size) return // nobody is watching, so nothing moves
     const now = Date.now()
-    for (const b of players.values()) if (b.bot) moveResident(b, 1 / 15, now)
+    for (const p of players.values()) {
+      if (p.out && now > p.back) {
+        Object.assign(p, healthy(), { safe: now + 2000 }) // two seconds of peace after coming back
+        all({ t: 'up', id: p.id })
+      }
+      if (p.bot && !p.out) moveResident(p, 1 / 15, now)
+    }
     all({ t: 'pos', p: [...players.values()].map((p) => [p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), +p.air]) })
   }, 1000 / 15)
 

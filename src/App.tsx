@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { birds, canEat, foods, seasons, type BirdId, type FoodId, type SeasonId } from './data'
-import { caw, feed, input, setBird, unlockAudio, useWorld, world } from './game'
+import { birds, canEat, foods, KO_BONUS, MAX_HP, seasons, weapons, type BirdId, type FoodId, type SeasonId, type WeaponId } from './data'
+import { caw, feed, fire, input, setBird, unlockAudio, useWorld, world } from './game'
 
 // three.js is the heavy part, so it loads after the text is on screen
 const Scene = lazy(() => import('./Scene'))
@@ -9,6 +9,7 @@ const Scene = lazy(() => import('./Scene'))
 const thisSeason = (['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'autumn', 'autumn', 'autumn', 'winter'] as const)[new Date().getMonth()]
 const species = Object.keys(birds) as BirdId[]
 const menu = Object.keys(foods) as FoodId[]
+const arsenal = Object.keys(weapons) as WeaponId[]
 
 // ---------- flight controls: keyboard on the focused garden, a stick and two buttons on touch screens ----------
 
@@ -21,6 +22,7 @@ function onKey(e: KeyboardEvent, down: boolean) {
   const k = e.key.toLowerCase()
   if (k === ' ') input.flap = down
   else if (k === 'c') down && !e.repeat && caw()
+  else if (k >= '1' && k <= String(arsenal.length)) down && fire(arsenal[+k - 1]) // holding the key keeps firing as the cooldown allows
   else if (Object.hasOwn(steer, k)) {
     held[steer[k]] = down
     input.x = +held.right - +held.left
@@ -106,7 +108,7 @@ export default function App() {
       <main>
         <section id="feeder">
           <h2>Fly in the garden</h2>
-          <p>You are a bird, and so is everyone else who is here right now. Fly to the table and eat what your species eats. Bread is the trap: anyone can eat it, it scores nothing, and it leaves you fat and slow.</p>
+          <p>You are a bird, and so is everyone else who is here right now. Fly to the table and eat what your species eats: every bite scores, heals a heart, and brings you closer to the next ridiculous weapon. Bread is the trap: anyone can eat it, it scores nothing, and it leaves you fat and slow.</p>
 
           <div className="picker">
             <div className="chips" role="group" aria-label="Choose your bird">
@@ -127,7 +129,7 @@ export default function App() {
             style={{ background: `linear-gradient(${sky[0]}, ${sky[1]})` }}
             tabIndex={0}
             role="application"
-            aria-label="The bird garden. Steer with W A S D or the arrow keys, hold Space to flap, press C to call."
+            aria-label="The bird garden. Steer with W A S D or the arrow keys, hold Space to flap, press C to call, and fire unlocked weapons with keys 1 to 4."
             onKeyDown={(e) => onKey(e, true)}
             onKeyUp={(e) => onKey(e, false)}
             onBlur={letGo}
@@ -151,16 +153,38 @@ export default function App() {
                     <Dot bird={p.bird} />
                     {birds[p.bird].name}
                     {p === me && ' (you)'}
+                    <i>{p.out ? '💤' : '♥'.repeat(p.hp)}</i>
                     <b>{p.score}</b>
                   </li>
                 ))}
               </ol>
             </div>
 
+            {world.toast && (
+              <p className="toast" key={world.toastId} aria-live="polite">
+                {world.toast}
+              </p>
+            )}
+
             <p className="cta">
               <span className="idle">Click the garden to take off</span>
-              <span className="keys">WASD or arrows steer · hold Space to flap · C calls</span>
+              <span className="keys">WASD or arrows steer · hold Space to flap · C calls · 1 to 4 fire</span>
             </p>
+
+            <div className="arsenal" role="group" aria-label="Weapons">
+              {arsenal.map((id, n) => {
+                const w = weapons[id]
+                const locked = me.score < w.unlock
+                return (
+                  // mousedown is cancelled so that clicking a weapon doesn't take the keyboard away from the garden
+                  <button key={id} disabled={locked} aria-label={`${w.name}: ${w.how}. ${locked ? `Unlocks at ${w.unlock} points.` : `Key ${n + 1}.`}`} onMouseDown={(e) => e.preventDefault()} onClick={() => fire(id)}>
+                    <span aria-hidden="true">{locked ? '🔒' : w.emoji}</span>
+                    <small aria-hidden="true">{locked ? `${w.unlock} pts` : n + 1}</small>
+                    {world.fired[id] && <i key={world.fired[id]} style={{ animationDuration: `${w.cooldown}ms` }} />}
+                  </button>
+                )
+              })}
+            </div>
 
             <div className="touch">
               <Stick />
@@ -179,6 +203,16 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          <p className="legend">
+            <strong>Weapons:</strong>{' '}
+            {arsenal.map((id) => (
+              <span key={id}>
+                {weapons[id].emoji} {weapons[id].name} at {weapons[id].unlock} points {weapons[id].how}.{' '}
+              </span>
+            ))}
+            Every bird has {MAX_HP} hearts. Knock one out for {KO_BONUS} bonus points; it is back after three seconds. The residents shoot back.
+          </p>
 
           <h3>Put out food</h3>
           <Chips label="Put out food" items={foods} onPick={(id) => (feed(id), setFood(id))} />
@@ -218,7 +252,7 @@ export default function App() {
         </section>
       </main>
 
-      <footer>No birds were fed bread in the making of this page. What happens in the garden is on you.</footer>
+      <footer>No birds were fed bread or harmed in the making of this page. What happens in the garden is on you.</footer>
     </>
   )
 }

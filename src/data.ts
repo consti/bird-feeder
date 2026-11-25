@@ -64,3 +64,19 @@ export const MAX_Y = 4.2
 export const canEat = (bird: BirdId, food: FoodId) => food === 'bread' || (foods[food].birds as BirdId[]).includes(bird)
 // bigger birds reach further
 export const reach = (bird: BirdId) => 0.3 + 0.12 * birds[bird].size
+
+// ---- fighting ----
+
+export const MAX_HP = 3
+export const KO_BONUS = 3 // points for knocking a bird out
+
+// Unlocked by score, fired with keys 1 to 4. The server decides who gets hit: `range` is how far the shot reaches,
+// except for the poop bomb, where it is how wide the splat is on whoever is below you.
+export const weapons = {
+  seed: { name: 'Seed Spit', emoji: '🌰', unlock: 3, cooldown: 600, range: 2.5, damage: 1, how: 'hits the nearest bird' },
+  bread: { name: 'Bread Cannon', emoji: '🥖', unlock: 6, cooldown: 3000, range: 3, damage: 0, how: 'makes the nearest bird fat and slow' },
+  poop: { name: 'Poop Bomb', emoji: '💩', unlock: 10, cooldown: 2500, range: 1, damage: 2, how: 'lands on every bird below you' },
+  laser: { name: 'Laser Eyes', emoji: '👀', unlock: 15, cooldown: 2000, range: 4, damage: 2, how: 'zaps the nearest bird from far away' },
+}
+
+export type WeaponId = keyof typeof weapons
